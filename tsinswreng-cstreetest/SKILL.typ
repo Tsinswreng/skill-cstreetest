@@ -56,8 +56,8 @@ description: CsTreeTest測試框架寫法規範
 #H[AI 新增測試時的最小操作清單][
 	如果你是 AI, 當用戶要求“爲某個類補測試”時, 按這個順序做:
 	+ 找到對應模塊下最近的測試目錄
-	+ 新建 `TestXxx.cs`, 實現 `ITester`
-	+ 在 `RegisterTestsInto` 中用 `MkFnRegisterTest` 註冊用例
+	+ 新建 `_TestXxx.cs` 作爲實現 `ITester` 的主檔, 再按被測函數新建 `TestXxx.cs`
+	+ 在各 `RegisterXxx` 中用 `MkTestFnRegister` 註冊用例
 	+ 在最近的 `TestMgr` 補 `RegisterTester<TestXxx>()`
 	+ 若該模塊尚未被上層收編, 再補 `RegisterSubMgr(...)`
 	+ 不看主入口, 除非用戶明確要求
@@ -156,5 +156,12 @@ public partial class TestCalculator {
 
 
 #H[總結注意事項和禁止事項][
-	
+	- 一個 tester 通常對應一個 testee；不同 tester 放在不同目錄。
+	- tester 使用 partial class：以 `_TestXxx.cs` 作爲主檔，只負責組裝；每個 `TestXxx.cs` 只主要測試一個被測函數。
+	- 每個測試 csproj 都要有 TestMgr；上層 TestMgr 只收編下級 TestMgr，不直接註冊下級的各個 tester。
+	- 註冊測試時，使用 `nameof(...)` 指明被測函數，且用例名必須能辨認所測行爲。
+	- 能使用 `Assert` 時，不要手動以 `if` 加 `throw` 實現斷言。
+	- 涉及數據庫時，測試數據必須唯一，並確保無論測試結果如何都會硬刪除；可使用有序 Node 集中完成建置與清理。
+	- 禁止把不同 API 的所有測試用例寫進同一個文件；
+	- 禁止使用含糊的用例名，如 `Test1`、`Try`、`Temp`。
 ]
