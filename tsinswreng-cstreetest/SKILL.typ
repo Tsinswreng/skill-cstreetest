@@ -1,5 +1,5 @@
-#import "@local/tsinswreng-scriptorium:0.1.0": *
-#show: _Show
+// #import "@local/tsinswreng-scriptorium:0.1.0": *
+// #show: _Show
 
 
 #import "@preview/tsinswreng-auto-heading:0.1.0": auto-heading
@@ -12,53 +12,22 @@ description: CsTreeTest測試框架寫法規範
 
 \-\-\-
 
-#H[這份文檔的用途][
-	這份文檔規定本項目怎樣使用自研的 `Tsinswreng.CsTreeTest` 測試框架編寫測試。
-	讀者對象是新增或維護測試的開發者，以及在項目中工作的 AI。
-
-	文檔按三步展開：先講測試工程的整體結構，再講每一層的寫法，最後講細節、邊界與常見錯誤。
-	所有範例代碼按本地源 `0.2.0-alpha` 的 API 寫成。
-
-	讀完之後，讀者應當能夠獨立完成三件事：
-	建立一個新的測試工程；為某個被測類補齊測試；判斷一段既有測試代碼屬於哪一代寫法。
-]
 
 #H[版本前提][
-	`Tsinswreng.CsTreeTest` 目前同時存在兩代 API。兩代的型別名稱與裝配方式都不同，
-	混用時編譯不通過。因此動手之前，讀者要先確認目標工程屬於哪一代。
-
-	+ `0.2.0-alpha` 是本地源中的版本，也是本文規範的對象。
-	+ `0.1.1-alpha` 已廢棄, 兩版不兼容
+	本skill針對`0.2.0-alpha`版本,
+	 `0.1.1-alpha` 已廢棄,
+	 兩版不兼容
 
 ]
 
-#H[範式總覽][
-	一個測試工程由五層組成，每一層只做一件事：
-
-	+ exe 入口組裝依賴並執行測試。它不碰測試樹的內部結構。
-	+ 程序集入口 `XxxTest.MkTree()` 建立根節點，掛上組裝器，返回 `ITestNode`。
-	+ 組裝器 `XxxTester` 是 `Tester` 的子類，在 `Init()` 裏把各測試類掛到根節點下。
-	+ 測試類主檔 `_TestXxx.cs` 取出被測對象，再把各分片串起來，自身不寫用例。
-	+ 分片 `Test<被測函數名>.cs` 只負責往本測試類的節點上掛這個函數的用例。
-
-	把五層的職責連起來看：exe 準備好依賴，程序集入口建立樹，組裝器掛測試類，
-	主檔串分片，分片提供用例。
-
-	五層之外，測試工程還需要一個依賴來源 `Di.cs`。
-	由用戶業務項目提供,
-	非本庫所提供
-
-	除結構之外，本文還規定幾條寫法約定：
-	+ 一個被測函數的用例放在一個文件裏，一個被測類的測試放在一個目錄裏。
-]
-
-#H[工程級骨架][
+#H[工程骨架][
 
 	#H[程序集入口][
 		程序集入口的職責只有建立根節點與掛上組裝器：
 
+		`MyProj1Test.cs`
 		```cs
-		File: MyProj1Test.cs
+		
 		using MyProj1.Test.MyDomains.Calculator;
 		using Tsinswreng.CsTreeTest;
 
@@ -86,24 +55,18 @@ description: CsTreeTest測試框架寫法規範
 			public override void Init(){
 				// AddTester 是 ITester 的擴展方法，故顯式用 this 作接收者。
 				this.AddTester<TestCalculator>();
+				//欲再註冊其他Tester則繼續寫 this.AddTester<Xxx>();
 			}
 		}
 		```
-
-		根節點的三個設定各有用途。
-		名字用於失敗輸出的路徑。
-		`NonParallelizable` 用於整棵子樹都不與別的分支同時跑。
-		`Ordered` 用於同一批用例按聲明次序跑。
-		這兩者互相獨立，可以同時開啟。
 	]
 
 	#H[exe 入口][
 		exe 入口放在另一個工程，固定三步，順序不可調換：
 
 		```cs
-		File: Program.cs
 		using Tsinswreng.CsTreeTest;
-		namespace MyProj1.Test.Exe;
+		namespace MyProj1.Test;
 		public static class Program{
 			public static async Task<int> Main(){
 				var Tree = MyProj1Test.MkTree();
@@ -117,8 +80,12 @@ description: CsTreeTest測試框架寫法規範
 
 #H[測試類與分片][
 	#H[主檔][
+		partial類主文件入口 命名規則:
 		```cs
-		File: MyDomains/Calculator/_TestCalculator.cs
+		被測類名+"/"+"_Test"+被測類名+".cs"
+		```
+		`MyDomains/Calculator/_TestCalculator.cs`
+		```cs
 		using Tsinswreng.CsTreeTest;
 
 		namespace MyProj1.Test.MyDomains.Calculator;
@@ -129,19 +96,17 @@ description: CsTreeTest測試框架寫法規範
 			ICalculator Calculator = Di.GetRSvc<ICalculator>();
 
 			public override void Init(){
-				// 分片拿到的是本測試類的節點。
-				RegisterAdd(TestNode);
-				RegisterTryIntDivide(TestNode);
+				// 分片直接往本測試類的節點上掛用例。
+				RegisterAdd();
+				RegisterTryIntDivide();
 			}
 		}
 		```
-
-		每個被測函數的用例寫在各自的分片文件裏。
-		因此新增一個被測函數的測試時,
-		主檔只加一行 `Register<函數名>(TestNode)`。
 	]
 
 	#H[分片][
+		每個分片只負責測一個函數。
+		文件名不用`_`開頭
 		`MyDomains/Calculator/TestAdd.cs`
 		```cs
 		using Tsinswreng.CsTreeTest;
@@ -150,24 +115,18 @@ description: CsTreeTest測試框架寫法規範
 
 		// 本文件只測 ICalculator.Add 這一個被測函數。
 		public partial class TestCalculator{
-			public void RegisterAdd(ITestNode Node){
-				// 元數據寫一次，之後每條用例只寫名字與函數體。
-				var R = Node.MkRegister<TestCalculator>(
-					typeof(ICalculator)// 被測類型
-					,nameof(ICalculator.Add)// 被測函數名，必須用 nameof
-					,"Add:"// 用例名前綴
-				).Register;
+			void RegisterAdd(){
 				var T = Assert.IsTrue;
 
-				R("正數相加", async (O) => {
-					T(Calculator.Add(5, 3) == 8, "期望 8");
-					T(Calculator.Add(6, 4) == 10, "期望 10");
+				this.AddTestCase("Add_PositiveNumbers_Sum", async (O) => {
+					T(Calculator.Add(5, 3) == 8);
+					T(Calculator.Add(6, 4) == 10);
 					return NIL;
 				});
 
-				R("正負數相加", async (O) => {
+				this.AddTestCase("Add_PositiveAndNegative_Sum", async (O) => {
 					var Sum = Calculator.Add(5, -3);
-					T(Sum == 2, "期望 2，實際 " + Sum);
+					T(Sum == 2, $"期望 2，實際 {Sum}");
 					return NIL;
 				});
 			}
@@ -182,16 +141,17 @@ description: CsTreeTest測試框架寫法規範
 
 	+ 用例一律是異步的。純同步的邏輯直接返回 `NIL` 即可。
 		工程若沒有引入型別別名，`NIL` 的位置寫 `null`。
-	+ 參數 `O` 的值來自執行選項 `OptTestExecutor.Arg`，所有用例共用同一個引用。
-		絕大多數用例用不到這個參數，因此不要把它當成每條用例各自的入參。
-	+ 用例失敗時拋出例外，執行器據此判定失敗。
+	+ 參數 `O` 目前用不到。留作擴展
+	+ 若用例拋出異常則執行器據此判定失敗。
+	+ `Assert.IsTrue`斷言失敗時即拋異常
 
-	用例的寫法有兩種，按長度與複用情況選擇：
+	用例可以寫成匿名函數，也可以寫成常態具名函數。
+	具名函數用 `this.AddTestCase(nameof(MyCase), MyCase!)` 註冊，
+	`!` 不可省，因為 `Task<nil>` 與 `Task<obj?>` 的可空性不同。
 ]
 
 #H[斷言][
-	能用斷言的地方就用斷言：
-
+	能用斷言的地方就用斷言
 	```cs
 	var T = Assert.IsTrue;
 	T(Add(1, 2) == 3);
@@ -223,7 +183,7 @@ description: CsTreeTest測試框架寫法規範
 
 	```cs
 	await new TreeTestExecutor().RunEtPrint(
-		Mgr.TestNode
+		Tree
 		, Opt: new OptTestExecutor{ IsParallel = false }
 	);
 	```
@@ -235,24 +195,29 @@ description: CsTreeTest測試框架寫法規範
 ]
 
 
-#H[測試涉及數據庫操作][
-	被測函數會讀寫數據庫時，測試自己負責準備數據與清理數據。
-
+#H[測試涉及數據庫操作時][
+	被測函數會讀寫數據庫時，測試自己負責隔離數據。
+	
+	常見做法:
+	每套測試用例自己各自準備種子數據,
+	先把種子數據插入數據庫,
+	然後測試並斷言,
+	最後無論測試通過與否 都清除自己寫入的種子數據
+	
 	準備數據時，測試代碼先把測試數據插入數據庫。
-	構造的測試數據要足夠獨特，避免與既有數據重複，否則斷言可能命中別的數據。
+	構造的測試數據要足夠獨特,
+	避免與既有數據重複,
+	否則斷言可能命中別的數據。
 
-	清理數據時，測試代碼在測試結束後硬刪除插入的數據。
-	不論測試成功還是失敗，這些數據都要刪除，因此清理動作放在 `finally` 塊中。
+	清理數據時,
+	測試代碼在測試結束後硬刪除插入的數據。
+	不論測試成功還是失敗,
+	這些數據都要刪除,
+	因此清理動作放在 `finally` 塊中。
 
 	此外，建立數據與清理數據這兩條用例要能被單獨重複執行，不要依賴上一輪留下的數據。
 	多條用例會讀寫同一批數據時，測試代碼再給節點加 `NonParallelizable`，
 	否則並行執行會互相干擾。
-]
-
-
-#H[AI 新增測試時的操作順序][
-	你是 AI 時，用戶要求給某個類補測試，按下面的順序做：
-
 ]
 
 
@@ -274,13 +239,13 @@ description: CsTreeTest測試框架寫法規範
 
 	// 本文件只測 ICalculator.Add 這一個被測函數。
 	public partial class TestCalculator {
-		public partial void RegisterAdd(ITestNode Node);
+		public partial void RegisterAdd();
 
-		///把 Add 的用例掛到節點上
-		public partial Task<nil> AddPositiveNumbers(obj? O);
+		///兩個正數相加
+		public partial Task<nil> Add_PositiveNumbers_Sum(obj? O);
 
-		///正負數相加
-		public partial Task<nil> AddPositiveAndNegativeNumbers(obj? O);
+		///正數與負數相加
+		public partial Task<nil> Add_PositiveAndNegative_Sum(obj? O);
 	}
 	````
 
@@ -294,25 +259,20 @@ description: CsTreeTest測試框架寫法規範
 
 	// 本文件只測 ICalculator.Add 這一個被測函數。
 	public partial class TestCalculator {
-		public partial void RegisterAdd(ITestNode Node) {
-			var R = Node.MkRegister<TestCalculator>(
-				typeof(ICalculator)// 被測類型
-				,nameof(ICalculator.Add)// 被測函數名
-				,"Add:"// 用例名前綴
-			).Register;
-			var T = Assert.IsTrue;
-
-			R(nameof(AddPositiveNumbers), AddPositiveNumbers!);
-			R(nameof(AddPositiveAndNegativeNumbers), AddPositiveAndNegativeNumbers!);
+		public partial void RegisterAdd() {
+			this.AddTestCase(nameof(Add_PositiveNumbers_Sum), Add_PositiveNumbers_Sum!);
+			this.AddTestCase(nameof(Add_PositiveAndNegative_Sum), Add_PositiveAndNegative_Sum!);
 		}
 
-		public partial async Task<nil> AddPositiveNumbers(obj? O){
+		public partial async Task<nil> Add_PositiveNumbers_Sum(obj? O){
+			var T = Assert.IsTrue;
 			T(Calculator.Add(5, 3) == 8, "期望 8");
 			T(Calculator.Add(6, 4) == 10, "期望 10");
 			return NIL;
 		}
 
-		public partial async Task<nil> AddPositiveAndNegativeNumbers(obj? O){
+		public partial async Task<nil> Add_PositiveAndNegative_Sum(obj? O){
+			var T = Assert.IsTrue;
 			T(Calculator.Add(5, -3) == 2);
 			return NIL;
 		}
